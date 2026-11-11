@@ -7,17 +7,18 @@ pub enum Token {
     TokIdentifier(String),
     TokNumber(String),
     TokString(String),
+    TokCharacter(String),
     TokPlus,
     TokMinus,
     TokLParen,
     TokRParen,
-    TokDoubleQuotes,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Number(i64),
+    Num(i64),
     Str(String), 
+    Char(char),
     Binary {
         left: Box<Expr>,
         op: Token,
@@ -33,6 +34,7 @@ pub enum Expr {
 pub enum Value {
     Int(i64),
     Str(String),
+    Char(char)
 }
 
 fn file_read_to_string(path: &str) -> Result<String, String> {
@@ -92,6 +94,22 @@ fn tokenize(content: &str) -> Result<Vec<Token>, String> {
                     return Err("Unterminated string literal".into());
                 }
                 tokens.push(Token::TokString(string_val));
+            }
+            '\'' => {
+                chars.next();
+                let mut c_val = String::new();
+                while let Some(&next_c) = chars.peek(){
+                    if next_c == '\'' {
+                        break;
+                    }
+                    c_val.push(next_c);
+                    chars.next();
+                }
+                if chars.peek() == Some(&'\'') { chars.next(); }
+                else { 
+                    return Err("Unterminated char quotes".into());
+                }
+                tokens.push(Token::TokCharacter(c_val));
             }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut ident = String::new();
@@ -165,8 +183,9 @@ impl Parser {
     fn parse_expr(&mut self) -> Result<Expr, String> {
         let left_token = self.advance().ok_or("Expected expression")?;
         let left = match left_token {
-            Token::TokNumber(n) => Expr::Number(n.parse::<i64>().map_err(|e| e.to_string())?),
-            Token::TokString(s) => Expr::Str(s), 
+            Token::TokNumber(n) => Expr::Num(n.parse::<i64>().map_err(|e| e.to_string())?),
+            Token::TokString(s) => Expr::Str(s),
+            Token::TokCharacter(c) => Expr::Char(c.parse::<char>().map_err(|e| e.to_string())?),
             other => return Err(format!("Expected expression, got {:?}", other)),
         };
 
@@ -181,7 +200,7 @@ impl Parser {
 
             let right_token = self.advance().ok_or("Expected expression after operator")?;
             let right = match right_token {
-                Token::TokNumber(n) => Expr::Number(n.parse::<i64>().map_err(|e| e.to_string())?),
+                Token::TokNumber(n) => Expr::Num(n.parse::<i64>().map_err(|e| e.to_string())?),
                 other => return Err(format!("Expected number after operator, got {:?}", other)),
             };
 
@@ -198,8 +217,9 @@ impl Parser {
 
 fn eval(expr: &Expr) -> Result<Value, String> {
     match expr {
-        Expr::Number(n) => Ok(Value::Int(*n)),
+        Expr::Num(n) => Ok(Value::Int(*n)),
         Expr::Str(s) => Ok(Value::Str(s.clone())),
+        Expr::Char(c) => Ok(Value::Char(*c)),
         Expr::Binary { left, op, right } => {
             let l_val = eval(left)?;
             let r_val = eval(right)?;
@@ -222,6 +242,7 @@ fn eval(expr: &Expr) -> Result<Value, String> {
                 match &val {
                     Value::Int(n) => println!("{}", n),
                     Value::Str(s) => println!("{}", s),
+                    Value::Char(c) => println!("{}", c),
                 }
                 
                 Ok(val)
